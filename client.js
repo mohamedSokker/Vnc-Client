@@ -1,13 +1,15 @@
+const Client = require("ssh2").Client;
+const net = require("net");
+const fs = require("fs");
 const express = require("express");
 const app = express();
 const http = require("http");
 const server = http.createServer(app);
 const socketio = require("socket.io");
 const path = require("path");
+const { client } = require("./vncClient");
 
 const { addConndection } = require("./vncClient");
-
-const { spawn } = require("child_process");
 
 let users = {};
 let rooms = {};
@@ -50,93 +52,198 @@ io.on("connection", (socket) => {
   });
 });
 
-let sshTunnel;
-let isExited = false;
-let isConnected = false;
-let sshTunnelPID = null;
-const { EventEmitter } = require("node:events");
-
-const myConnection = new EventEmitter();
-
-const startTunnel = async (command) => {
-  try {
-    sshTunnel = spawn(command, {
-      detached: true,
-      stdio: "ignore",
-      shell: true,
-    });
-    console.log(`SSH tunnel ProcessID ${sshTunnel.pid}`);
-
-    sshTunnel.unref();
-
-    sshTunnel.on("message", (message) => {
-      console.log(message);
-    });
-
-    sshTunnel.on("exit", (code, signal) => {
-      if (code === 0) {
-        console.log(`tunnel established`);
-        // Perform actions after the tunnel is established
-      } else if (code !== null) {
-        console.log(`SSH tunnel exited ${code}`);
-        // if (!isExited) startTunnel(command);
-      } else if (signal !== null) {
-        console.log(`SSH tunnel killed ${signal}`);
-        // if (!isExited) startTunnel(command);
-      }
-    });
-
-    sshTunnel.on("close", (code, signal) => {
-      console.log(`SSH Tunnel Closed`);
-      if (code === 0) {
-        console.log(`Tunnel Established`);
-      }
-      if (!isExited) startTunnel(command);
-    });
-
-    sshTunnel.on("error", (err) => {
-      console.log(`SSH Error ${err.message}`);
-      // if (!isExited) startTunnel(command);
-    });
-  } catch (err) {
-    throw new Error(err.message);
-  }
+const sshConfig = {
+  host: "192.168.1.7",
+  port: 22,
+  username: "osama",
+  password: "sokker999",
+  // privateKey: fs.readFileSync("/home/mohamed/.ssh/id_rsa"),
 };
+
+const localAddress = "127.0.0.1";
+const localPort = 8001;
+const remoteAddress = "127.0.0.1";
+const remotePort = 8000;
+let conn = null;
+
+async function createTunnel() {
+  if (!conn) {
+    return new Promise((resolve, reject) => {
+      conn = new Client();
+
+      conn.on("ready", () => {
+        console.log(
+          "SSH connection established. Creating local port forward..."
+        );
+
+        // Create a TCP server that listens on 127.0.0.1:8001
+        const server = net.createServer((localStream) => {
+          conn.forwardOut(
+            localAddress,
+            localPort,
+            remoteAddress,
+            remotePort,
+            (err, stream) => {
+              if (err) {
+                console.error("Error creating local port forward:", err);
+                conn.end();
+                server.close();
+                reject(err);
+              }
+              console.log(`Forwarded`);
+              // console.log(client);
+
+              //   client._connection.on("connect", () => {
+              client._connected = true;
+              client.emit("connected");
+              //   });
+
+              client._connection.on("close", () => {
+                client.resetState();
+                client.emit("closed");
+              });
+
+              client._connection.on("timeout", () => {
+                client.emit("connectTimeout");
+              });
+
+              client._connection.on("error", (err) => {
+                client.emit("connectError", err);
+              });
+
+              client._connection.on("data", async (data) => {
+                client._log(data.toString(), true, 5);
+                client._socketBuffer.pushData(data);
+
+                if (client._processingFrame) {
+                  return;
+                }
+
+                if (!client._handshaked) {
+                  client._handleHandshake();
+                } else if (client._expectingChallenge) {
+                  await client._handleAuthChallenge();
+                } else if (client._waitingServerInit) {
+                  await client._handleServerInit();
+                } else {
+                  await client._handleData();
+                }
+              });
+
+              // Pipe the local connection to the remote server through the SSH tunnel
+              localStream.pipe(stream).pipe(localStream);
+            }
+          );
+        });
+
+        // Handle local server close event
+        server.on("close", () => {
+          console.log("Local port forward server closed");
+        });
+
+        // Handle local server error event
+        server.on("error", (err) => {
+          console.error("Local port forward server error:", err);
+          conn.end();
+          reject(err);
+        });
+
+        // Listen for the 'listening' event to ensure the server is fully ready
+        server.listen(localPort, localAddress, () => {
+          console.log(
+            `Local port forward server listening on ${localAddress}:${localPort}`
+          );
+          resolve({ server, conn });
+        });
+      });
+
+      // Handle SSH connection close event
+      conn.on("close", () => {
+        console.log("SSH connection closed");
+      });
+
+      // Handle SSH connection error event
+      conn.on("error", (err) => {
+        console.error("SSH connection error:", err);
+        reject(err);
+      });
+
+      conn.connect(sshConfig);
+    });
+  }
+}
 
 app.get("/bauerScreen/:port", async (req, res) => {
   try {
-    // const port = Number(req.params.port);
-    // const screenCommand = "ssh -N -L 8001:127.0.0.1:8000 osama@192.168.1.7";
-
-    // await startTunnel(screenCommand);
-
-    // sshTunnelPID = sshTunnel.pid;
-
-    // process.on("SIGINT", () => {
-    //   isExited = true;
-    //   console.log(sshTunnelPID);
-    //   if (sshTunnelPID) {
-    //     process.kill(-sshTunnelPID);
-    //     process.kill(sshTunnelPID);
-    //     sshTunnelPID = null;
-    //   }
-    //   process.exit();
-    // });
-    // setInterval(() => {
-    //   if (sshTunnel.pid) myConnection.emit("connected");
-    // }, 5000);
-    // console.log(`Connected => ${sshTunnel.pid}`);
-    // myConnection.on("connected", () => {
-    //   if (!isConnected) {
-    //     console.log("SSH Connected");
-    res.sendFile(`${__dirname}/display.html`);
-
-    //     isConnected = true;
-    //   }
-    // });
-  } catch (err) {
-    console.error("Error:", err.message);
+    await createTunnel();
+    return res.sendFile(`${__dirname}/display.html`);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
   }
+  //   const port = Number(req.params.port);
+
+  //   const localAddress = "127.0.0.1";
+  //   const localPort = 8001;
+  //   const remoteAddress = "127.0.0.1";
+  //   const remotePort = 8000;
+
+  //   const conn = new Client();
+
+  //   conn.on("ready", () => {
+  //     console.log("SSH connection established. Creating local port forward...");
+
+  //     // Create a TCP server that listens on 192.168.1.8:8001
+  //     const server = net.createServer((localStream) => {
+  //       conn.forwardOut(
+  //         localAddress,
+  //         localPort,
+  //         remoteAddress,
+  //         remotePort,
+  //         (err, stream) => {
+  //           if (err) {
+  //             console.error("Error creating local port forward:", err);
+  //             conn.end();
+  //             server.close();
+  //           }
+
+  //           // Pipe the local connection to the remote server through the SSH tunnel
+  //           localStream.pipe(stream).pipe(localStream);
+  //         }
+  //       );
+  //     });
+
+  //     // Handle local server close event
+  //     server.on("close", () => {
+  //       console.log("Local port forward server closed");
+  //     });
+
+  //     // Handle local server error event
+  //     server.on("error", (err) => {
+  //       console.error("Local port forward server error:", err);
+  //       conn.end();
+  //     });
+
+  //     server.listen(localPort, localAddress, () => {
+  //       console.log(
+  //         `Local port forward server listening on ${localAddress}:${localPort}`
+  //       );
+  //       setTimeout(() => {
+  //         res.sendFile(`${__dirname}/display.html`);
+  //       }, 20000);
+  //     });
+  //   });
+
+  //   // Handle SSH connection close event
+  //   conn.on("close", () => {
+  //     console.log("SSH connection closed");
+  //   });
+
+  //   // Handle SSH connection error event
+  //   conn.on("error", (err) => {
+  //     console.log(`SSH connection error: ${err.message}`);
+  //   });
+
+  //   conn.connect(sshConfig);
 });
 
 server.listen(5004, () => {
