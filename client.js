@@ -7,9 +7,7 @@ const http = require("http");
 const server = http.createServer(app);
 const socketio = require("socket.io");
 const path = require("path");
-const { client } = require("./vncClient");
-
-const { addConndection } = require("./vncClient");
+const { client, addConndection } = require("./vncClient");
 
 let users = {};
 let rooms = {};
