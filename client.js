@@ -54,8 +54,7 @@ const sshConfig = {
   host: "192.168.1.7",
   port: 22,
   username: "osama",
-  password: "sokker999",
-  // privateKey: fs.readFileSync("/home/mohamed/.ssh/id_rsa"),
+  privateKey: fs.readFileSync("/home/mohamed/.ssh/id_rsa"),
 };
 
 const localAddress = "127.0.0.1";
