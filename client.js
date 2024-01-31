@@ -88,44 +88,6 @@ async function createTunnel() {
                 reject(err);
               }
               console.log(`Forwarded`);
-              // console.log(client);
-
-              //   client._connection.on("connect", () => {
-              client._connected = true;
-              client.emit("connected");
-              //   });
-
-              client._connection.on("close", () => {
-                client.resetState();
-                client.emit("closed");
-              });
-
-              client._connection.on("timeout", () => {
-                client.emit("connectTimeout");
-              });
-
-              client._connection.on("error", (err) => {
-                client.emit("connectError", err);
-              });
-
-              client._connection.on("data", async (data) => {
-                client._log(data.toString(), true, 5);
-                client._socketBuffer.pushData(data);
-
-                if (client._processingFrame) {
-                  return;
-                }
-
-                if (!client._handshaked) {
-                  client._handleHandshake();
-                } else if (client._expectingChallenge) {
-                  await client._handleAuthChallenge();
-                } else if (client._waitingServerInit) {
-                  await client._handleServerInit();
-                } else {
-                  await client._handleData();
-                }
-              });
 
               // Pipe the local connection to the remote server through the SSH tunnel
               localStream.pipe(stream).pipe(localStream);

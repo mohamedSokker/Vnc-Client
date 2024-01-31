@@ -163,44 +163,44 @@ class VncClient extends Events {
 
     this._connection = net.connect(options.port || 5900, options.host);
 
-    // this._connection.on("connect", () => {
-    //   this._connected = true;
-    //   this.emit("connected");
-    // });
+    this._connection.on("connect", () => {
+      this._connected = true;
+      this.emit("connected");
+    });
 
-    // this._connection.on("close", () => {
-    //   this.resetState();
-    //   this.emit("closed");
-    // });
+    this._connection.on("close", () => {
+      this.resetState();
+      this.emit("closed");
+    });
 
-    // this._connection.on("timeout", () => {
-    //   this.emit("connectTimeout");
-    // });
+    this._connection.on("timeout", () => {
+      this.emit("connectTimeout");
+    });
 
-    // this._connection.on("error", (err) => {
-    //   this.emit("connectError", err);
-    // });
+    this._connection.on("error", (err) => {
+      this.emit("connectError", err);
+    });
 
-    // this._connection.on("data", async (data) => {
-    //   if (this._connected) {
-    //     this._log(data.toString(), true, 5);
-    //     this._socketBuffer.pushData(data);
+    this._connection.on("data", async (data) => {
+      if (this._connected) {
+        this._log(data.toString(), true, 5);
+        this._socketBuffer.pushData(data);
 
-    //     if (this._processingFrame) {
-    //       return;
-    //     }
+        if (this._processingFrame) {
+          return;
+        }
 
-    //     if (!this._handshaked) {
-    //       this._handleHandshake();
-    //     } else if (this._expectingChallenge) {
-    //       await this._handleAuthChallenge();
-    //     } else if (this._waitingServerInit) {
-    //       await this._handleServerInit();
-    //     } else {
-    //       await this._handleData();
-    //     }
-    //   }
-    // });
+        if (!this._handshaked) {
+          this._handleHandshake();
+        } else if (this._expectingChallenge) {
+          await this._handleAuthChallenge();
+        } else if (this._waitingServerInit) {
+          await this._handleServerInit();
+        } else {
+          await this._handleData();
+        }
+      }
+    });
   }
 
   /**
